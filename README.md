@@ -17,3 +17,19 @@ nginx_config:
   envs:
   - OPA_URL
 ```
+
+## Plugin Configuration
+
+When setting up the plugin on APISIX, provide a configuration
+similar to the following:
+```json
+{
+  "conf": [
+    {
+      "name": "opa",
+      "value": "{\"rule_path\": \"com.swisscom.dna.nb.example/rule1\"}"
+    }
+  ],
+  "disable": false
+}
+```

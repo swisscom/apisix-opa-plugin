@@ -68,13 +68,24 @@ func (p *OpaAuth) Filter(conf interface{}, w http.ResponseWriter, r pkgHTTP.Requ
 		p.initClient()
 	}
 
-	var input []byte
+	opaInputReq := OpaInputRequest{
+		Host:    valueOrDefault(r, "server_name", ""),
+		SrcIp:   r.SrcIP(),
+		Path:    string(r.Path()),
+		Headers: r.Header().View(),
+	}
+	input, err := json.Marshal(&opaInputReq)
+	if err != nil {
+		log.Errorf("unable to marshal JSON: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
 	req, err := http.NewRequest(http.MethodPost,
 		fmt.Sprintf(
 			"%s/v1/data/%s",
 			opaConf.OpaUrl,
-			formatRuleForUrl(opaConf.RulePath),
+			FormatRulePathUrl(opaConf.RulePath),
 		),
 		bytes.NewReader(input),
 	)
@@ -97,15 +108,42 @@ func (p *OpaAuth) Filter(conf interface{}, w http.ResponseWriter, r pkgHTTP.Requ
 		return
 	}
 
-	// TODO: Continue and evaluate policy result
+	// Parse response from OPA
+	var result Result
+	dec := json.NewDecoder(res.Body)
+	err = dec.Decode(&result)
+
+	if err != nil {
+		log.Errorf("unable to decode JSON response from OPA: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if result.StatusCode != 0 {
+		w.WriteHeader(int(result.StatusCode))
+		if result.Reason != "" {
+			_, err = w.Write([]byte(result.Reason))
+			if err != nil {
+				log.Errorf("unable to write reason: %v", err)
+			}
+		}
+	}
+}
+
+func valueOrDefault(r pkgHTTP.Request, s string, def string) string {
+	v, err := r.Var(s)
+	if err != nil {
+		return def
+	}
+	return string(v)
 }
 
 /*
-	formatRuleForUrl given a rulePath returns a path to be used
+	FormatRulePathUrl given a rulePath returns a path to be used
 	in an OPA /v1/data/path-goes-here request.
 */
 
-func formatRuleForUrl(path string) interface{} {
+func FormatRulePathUrl(path string) interface{} {
 	return strings.Replace(path, ".", "/", -1)
 }
 
