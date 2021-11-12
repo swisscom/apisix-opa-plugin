@@ -27,7 +27,7 @@ similar to the following:
   "conf": [
     {
       "name": "opa",
-      "value": "{\"rule_path\": \"com.swisscom.ini.dna.nb.example/rule1\"}"
+      "value": "{\"rule_path\": \"com.swisscom.ini.dna.nb/rule1\"}"
     }
   ],
   "disable": false
