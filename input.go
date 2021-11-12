@@ -8,3 +8,7 @@ type OpaInputRequest struct {
 	SrcIp   net.IP              `json:"src_ip"`
 	Headers map[string][]string `json:"headers"`
 }
+
+type OpaInput struct {
+	Input OpaInputRequest `json:"input"`
+}

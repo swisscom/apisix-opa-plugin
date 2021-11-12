@@ -7,6 +7,7 @@ import (
 	pkgHTTP "github.com/apache/apisix-go-plugin-runner/pkg/http"
 	"github.com/apache/apisix-go-plugin-runner/pkg/log"
 	"github.com/apache/apisix-go-plugin-runner/pkg/plugin"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -68,11 +69,13 @@ func (p *OpaAuth) Filter(conf interface{}, w http.ResponseWriter, r pkgHTTP.Requ
 		p.initClient()
 	}
 
-	opaInputReq := OpaInputRequest{
-		Host:    valueOrDefault(r, "server_name", ""),
-		SrcIp:   r.SrcIP(),
-		Path:    string(r.Path()),
-		Headers: r.Header().View(),
+	opaInputReq := OpaInput{
+		Input: OpaInputRequest{
+			Host:    valueOrDefault(r, "host", ""),
+			SrcIp:   r.SrcIP(),
+			Path:    string(r.Path()),
+			Headers: r.Header().View(),
+		},
 	}
 	input, err := json.Marshal(&opaInputReq)
 	if err != nil {
@@ -80,6 +83,8 @@ func (p *OpaAuth) Filter(conf interface{}, w http.ResponseWriter, r pkgHTTP.Requ
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	log.Infof("sending body=%v to OPA", string(input))
 
 	req, err := http.NewRequest(http.MethodPost,
 		fmt.Sprintf(
@@ -89,6 +94,8 @@ func (p *OpaAuth) Filter(conf interface{}, w http.ResponseWriter, r pkgHTTP.Requ
 		),
 		bytes.NewReader(input),
 	)
+
+	req.Header.Set("Content-Type", "application/json")
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -108,16 +115,30 @@ func (p *OpaAuth) Filter(conf interface{}, w http.ResponseWriter, r pkgHTTP.Requ
 		return
 	}
 
+	log.Infof("OPA policy evaluated correctly")
+
+	bodyString, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		log.Errorf("unable to read OPA response body: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	log.Infof("OPA Response Body = %v", string(bodyString))
+
 	// Parse response from OPA
-	var result Result
-	dec := json.NewDecoder(res.Body)
-	err = dec.Decode(&result)
+	var opaResponse OpaResponse
+	err = json.Unmarshal(bodyString, &opaResponse)
+
+	result := opaResponse.Result
 
 	if err != nil {
 		log.Errorf("unable to decode JSON response from OPA: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	log.Infof("got result=+%v", result)
 
 	if result.StatusCode != 0 {
 		w.WriteHeader(int(result.StatusCode))
